@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fünferreihe – Bingo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<script type="module" src="app.js"></script>
+<style>
+  :root{
+    --ink:#152025;
+    --ink-2:#1d2b31;
+    --paper:#f7ecd9;
+    --paper-dim:#e7dcc6;
+    --dauber:#e04e2c;
+    --dauber-dark:#b73c20;
+    --teal:#2f9c8f;
+    --teal-dark:#1f6b62;
+    --line: rgba(21,32,37,0.12);
+    --shadow: 0 10px 30px rgba(0,0,0,0.35);
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(circle at 15% 10%, rgba(47,156,143,0.18), transparent 40%),
+      radial-gradient(circle at 85% 90%, rgba(224,78,44,0.15), transparent 45%),
+      var(--ink);
+    color:var(--paper);
+    font-family:'Inter',sans-serif;
+    min-height:100%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+  .wrap{
+    width:100%;
+    max-width:520px;
+    padding:28px 18px 60px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    flex:1;
+  }
+  h1.brand{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:700;
+    font-size:28px;
+    letter-spacing:-0.5px;
+    margin:0 0 4px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  h1.brand .dot{
+    width:10px;height:10px;border-radius:50%;
+    background:var(--dauber);
+    box-shadow:0 0 10px var(--dauber);
+  }
+  .sub{color:rgba(247,236,217,0.55); font-size:13px; margin-bottom:32px; letter-spacing:0.3px;}
+
+  .screen{width:100%; display:flex; flex-direction:column; gap:16px; align-items:stretch;}
+  .hidden{display:none !important;}
+
+  .card{
+    background:var(--ink-2);
+    border:1px solid rgba(247,236,217,0.08);
+    border-radius:16px;
+    padding:22px;
+    box-shadow:var(--shadow);
+  }
+
+  label{font-size:12px; text-transform:uppercase; letter-spacing:1px; color:rgba(247,236,217,0.5); display:block; margin-bottom:8px;}
+  input[type=text]{
+    width:100%;
+    background:var(--ink);
+    border:1px solid rgba(247,236,217,0.15);
+    color:var(--paper);
+    font-family:'Space Grotesk',sans-serif;
+    font-size:20px;
+    padding:14px 16px;
+    border-radius:10px;
+    outline:none;
+    letter-spacing:1px;
+  }
+  input[type=text]:focus{border-color:var(--teal);}
+  input[type=text].code-input{text-transform:uppercase; text-align:center; letter-spacing:6px; font-weight:700;}
+
+  button{
+    font-family:'Inter',sans-serif;
+    font-weight:700;
+    font-size:15px;
+    border:none;
+    border-radius:10px;
+    padding:15px 18px;
+    cursor:pointer;
+    transition:transform .08s ease, filter .15s ease;
+  }
+  button:active{transform:scale(0.97);}
+  button.primary{background:var(--dauber); color:#fff;}
+  button.primary:hover{filter:brightness(1.08);}
+  button.secondary{background:transparent; color:var(--paper); border:1px solid rgba(247,236,217,0.25);}
+  button.secondary:hover{border-color:var(--paper);}
+  button.teal{background:var(--teal); color:#062825;}
+  button:disabled{opacity:0.4; cursor:not-allowed;}
+
+  .row{display:flex; gap:10px;}
+  .row > *{flex:1;}
+
+  .code-display{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:700;
+    font-size:44px;
+    letter-spacing:10px;
+    text-align:center;
+    color:var(--dauber);
+    padding:18px 0 6px;
+  }
+  .code-hint{text-align:center; font-size:12px; color:rgba(247,236,217,0.45); margin-bottom:10px;}
+
+  .players-list{display:flex; flex-direction:column; gap:8px; margin-top:10px;}
+  .player-chip{
+    display:flex; align-items:center; justify-content:space-between;
+    background:var(--ink); border-radius:10px; padding:10px 14px;
+    font-weight:600; font-size:14px;
+  }
+  .player-chip .score{
+    font-family:'Space Grotesk',sans-serif;
+    color:var(--teal); font-weight:700;
+  }
+  .player-chip.you::after{content:"DU"; font-size:10px; letter-spacing:1px; color:var(--dauber); margin-left:8px;}
+
+  .waiting{display:flex; align-items:center; gap:10px; color:rgba(247,236,217,0.6); font-size:14px; justify-content:center; padding:10px 0;}
+  .pulse{width:8px;height:8px;border-radius:50%;background:var(--teal); animation:pulse 1.2s infinite;}
+  @keyframes pulse{0%,100%{opacity:.3} 50%{opacity:1}}
+
+  /* Game screen */
+  .topbar{display:flex; justify-content:space-between; align-items:center; width:100%; margin-bottom:6px;}
+  .call-panel{
+    display:flex; align-items:center; gap:16px;
+    background:var(--ink-2); border-radius:16px; padding:16px 20px; width:100%;
+    border:1px solid rgba(247,236,217,0.08);
+  }
+  .call-number{
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:40px;
+    width:70px; height:70px; border-radius:50%;
+    background:var(--dauber); color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0;
+  }
+  .call-number.empty{background:var(--ink); color:rgba(247,236,217,0.3); font-size:16px;}
+  .call-meta{flex:1;}
+  .call-meta .label{font-size:11px; text-transform:uppercase; letter-spacing:1px; color:rgba(247,236,217,0.45);}
+  .call-meta .count{font-size:13px; color:rgba(247,236,217,0.6); margin-top:2px;}
+
+  .board{
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    gap:8px;
+    background:var(--paper);
+    border-radius:16px;
+    padding:14px;
+    margin:18px 0;
+    box-shadow:var(--shadow);
+  }
+  .cell{
+    aspect-ratio:1;
+    background:#fff;
+    border-radius:10px;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:700; font-size:18px;
+    color:var(--ink);
+    cursor:pointer;
+    border:2px solid transparent;
+    transition:all .12s ease;
+    user-select:none;
+  }
+  .cell.callable{border-color:var(--teal);}
+  .cell.marked{
+    background:var(--dauber);
+    color:#fff;
+    border-color:var(--dauber-dark);
+    transform:scale(0.96);
+  }
+  .cell:not(.callable):not(.marked){opacity:0.55; cursor:default;}
+
+  .actions{display:flex; gap:10px; width:100%;}
+  .actions button{flex:1;}
+
+  .scoreboard{width:100%; margin-top:22px;}
+  .scoreboard h3{font-size:12px; text-transform:uppercase; letter-spacing:1px; color:rgba(247,236,217,0.45); margin:0 0 10px;}
+
+  .overlay{
+    position:fixed; inset:0; background:rgba(21,32,37,0.9);
+    display:flex; align-items:center; justify-content:center; flex-direction:column;
+    gap:18px; padding:24px; text-align:center; z-index:10;
+  }
+  .overlay .big{font-family:'Space Grotesk',sans-serif; font-size:34px; font-weight:700;}
+  .overlay .big .dauber-word{color:var(--dauber);}
+  .overlay .sub2{color:rgba(247,236,217,0.6); font-size:14px;}
+
+  .rank-list{display:flex; flex-direction:column; gap:8px; width:100%; max-width:340px;}
+  .rank-item{
+    display:flex; justify-content:space-between; align-items:center;
+    background:var(--ink-2); padding:12px 16px; border-radius:10px; font-weight:600;
+  }
+  .rank-item.first{border:1px solid var(--dauber);}
+  .rank-item .pos{color:rgba(247,236,217,0.4); font-size:12px; margin-right:8px;}
+
+  .error-msg{color:var(--dauber); font-size:13px; min-height:16px;}
+  .footer-note{color:rgba(247,236,217,0.3); font-size:11px; text-align:center; margin-top:auto; padding-top:30px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 class="brand"><span class="dot"></span>Fünferreihe</h1>
+  <div class="sub">Multiplayer-Bingo · Reihe, Spalte oder Diagonale</div>
+
+  <!-- START -->
+  <div id="screen-start" class="screen">
+    <div class="card">
+      <label for="nameInput">Dein Name</label>
+      <input type="text" id="nameInput" maxlength="16" placeholder="z. B. Karla">
+    </div>
+    <div class="card">
+      <button class="primary" id="btnCreate">Spiel erstellen</button>
+    </div>
+    <div class="card">
+      <label for="codeInput">Mit Code beitreten</label>
+      <input type="text" id="codeInput" class="code-input" maxlength="4" placeholder="ABCD">
+      <div style="height:12px"></div>
+      <button class="teal" id="btnJoin">Beitreten</button>
+    </div>
+    <div class="error-msg" id="startError"></div>
+  </div>
+
+  <!-- LOBBY -->
+  <div id="screen-lobby" class="screen hidden">
+    <div class="card" id="lobbyCodeCard">
+      <div class="code-hint">Dein Beitrittscode</div>
+      <div class="code-display" id="lobbyCode">----</div>
+    </div>
+    <div class="card">
+      <label>Mitspieler*innen</label>
+      <div class="players-list" id="lobbyPlayers"></div>
+      <div class="waiting" id="lobbyWaitingHost"><span class="pulse"></span>Warte auf weitere Spieler…</div>
+      <div class="waiting hidden" id="lobbyWaitingGuest"><span class="pulse"></span>Warte auf Host…</div>
+    </div>
+    <button class="primary hidden" id="btnStartGame" disabled>Spiel starten</button>
+  </div>
+
+  <!-- GAME -->
+  <div id="screen-game" class="screen hidden">
+    <div class="call-panel">
+      <div class="call-number empty" id="callNumber">?</div>
+      <div class="call-meta">
+        <div class="label">Aktuelle Zahl</div>
+        <div class="count" id="calledCount">0 von 25 gezogen</div>
+      </div>
+    </div>
+    <div class="board" id="board"></div>
+    <div class="actions">
+      <button class="secondary" id="btnDraw">Zahl ziehen</button>
+      <button class="primary" id="btnBingo">BINGO!</button>
+    </div>
+    <div class="scoreboard">
+      <h3>Punktestand</h3>
+      <div class="players-list" id="gameScores"></div>
+    </div>
+    <button class="secondary hidden" id="btnEndGame" style="margin-top:14px;">Spiel beenden</button>
+  </div>
+
+  <div class="footer-note">Läuft komplett im Browser · peer-to-peer via PeerJS</div>
+</div>
+
+<!-- Overlays -->
+<div id="overlayRound" class="overlay hidden">
+  <div class="big">🎉 <span class="dauber-word" id="roundWinnerName">—</span> hat Bingo!</div>
+  <div class="sub2" id="roundScoresText"></div>
+  <button class="primary hidden" id="btnNextRound">Nächste Runde</button>
+  <div class="waiting" id="waitNextRound"><span class="pulse"></span>Host startet die nächste Runde…</div>
+</div>
+
+<div id="overlayEnd" class="overlay hidden">
+  <div class="big">Spiel vorbei</div>
+  <div class="rank-list" id="finalRanking"></div>
+  <button class="secondary" id="btnBackToStart">Neues Spiel</button>
+</div>
+
+</body>
+</html>
