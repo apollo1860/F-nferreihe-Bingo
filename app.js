@@ -102,6 +102,7 @@ el("btnCreate").addEventListener("click", async ()=>{
     players: { [state.myId]: { name, score:0 } },
     boards: {},
     called: {},
+    calledBy: {},
     currentNumber: null,
     calledCount: 0,
     roundKey: 0,
@@ -167,6 +168,7 @@ async function beginRound(providedRoom){
     status: "playing",
     boards,
     called: {},
+    calledBy: {},
     currentNumber: null,
     calledCount: 0,
     roundKey: (room.roundKey || 0) + 1,
@@ -178,27 +180,32 @@ async function beginRound(providedRoom){
 
 async function callNumber(n){
   const room = state.room;
-  const called = {...(room.called || {}), [n]: true};
+  const callerId = state.myId;
+  const calledBy = {...(room.calledBy || {}), [n]: callerId};
   const scoredLines = room.scoredLines || {};
 
   const updates = {
     [`called/${n}`]: true,
+    [`calledBy/${n}`]: callerId,
     currentNumber: n,
     calledCount: (room.calledCount || 0) + 1
   };
 
-  // Check every player's board for newly completed lines (not previously scored)
-  Object.entries(room.players || {}).forEach(([id, p])=>{
-    const board = room.boards && room.boards[id];
-    if(!board) return;
-    const lines = completedLines(board, called);
-    const already = scoredLines[id] || {};
+  // Nur der Aufrufer bekommt durch diesen Zug neue nutzbare Zahlen —
+  // andere Spieler haben keine neue Zahl gewonnen, also nur der Aufrufer prüfen.
+  const board = room.boards && room.boards[callerId];
+  const player = room.players && room.players[callerId];
+  if(board && player){
+    const myCalled = {};
+    Object.entries(calledBy).forEach(([num, pid])=>{ if(pid === callerId) myCalled[num] = true; });
+    const lines = completedLines(board, myCalled);
+    const already = scoredLines[callerId] || {};
     const newLines = lines.filter(l => !already[l]);
     if(newLines.length > 0){
-      updates[`players/${id}/score`] = (p.score || 0) + newLines.length;
-      newLines.forEach(l => { updates[`scoredLines/${id}/${l}`] = true; });
+      updates[`players/${callerId}/score`] = (player.score || 0) + newLines.length;
+      newLines.forEach(l => { updates[`scoredLines/${callerId}/${l}`] = true; });
     }
-  });
+  }
 
   const allCalled = (room.calledCount || 0) + 1 >= 25;
   if(!allCalled){
@@ -331,6 +338,7 @@ function renderBoard(room){
   boardEl.innerHTML = "";
   if(!board) return;
   const called = room.called || {};
+  const calledBy = room.calledBy || {};
   const order = room.turnOrder || [];
   const currentTurnId = order.length ? order[(room.turnIndex || 0) % order.length] : null;
   const isMyTurn = currentTurnId === state.myId;
@@ -342,8 +350,9 @@ function renderBoard(room){
       cell.className = "cell";
       cell.textContent = n;
       const isCalled = !!called[n];
+      const isMine = calledBy[n] === state.myId;
       if(isCalled){
-        cell.classList.add("marked");
+        cell.classList.add(isMine ? "marked" : "used");
       } else if(isMyTurn){
         cell.classList.add("callable");
         cell.addEventListener("click", ()=>{ callNumber(n); });
