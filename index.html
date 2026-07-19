@@ -6,7 +6,7 @@
 <title>Fünferreihe – Bingo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-<script type="module" src="app.js?v=4"></script>
+<script type="module" src="app.js?v=5"></script>
 <style>
   :root{
     --ink:#152025;
@@ -185,7 +185,12 @@
     border-color:var(--dauber-dark);
     transform:scale(0.96);
   }
-  .cell:not(.callable):not(.marked){opacity:0.55; cursor:default;}
+  .cell.used{
+    background:var(--paper-dim);
+    color:rgba(21,32,37,0.35);
+    cursor:default;
+  }
+  .cell:not(.callable):not(.marked):not(.used){opacity:0.55; cursor:default;}
 
   .actions{display:flex; gap:10px; width:100%;}
   .actions button{flex:1;}
