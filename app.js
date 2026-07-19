@@ -72,8 +72,6 @@ const state = {
   myName:"",
   roomCode:null,
   room:null,        // last known snapshot of rooms/{code}
-  marked:new Set(),
-  pool:[],
   processedRoundKey:null
 };
 
@@ -165,24 +163,41 @@ async function beginRound(isFirst){
     turnOrder: playerIds,
     turnIndex: 0
   });
-  state.marked = new Set();
 }
 
 async function callNumber(n){
   const room = state.room;
+  const called = {...(room.called || {}), [n]: true};
   const order = room.turnOrder || [];
   const nextIndex = order.length ? ((room.turnIndex || 0) + 1) % order.length : 0;
-  await update(roomRef(), {
-    [`called/${n}`]: true,
-    currentNumber: n,
-    calledCount: (room.calledCount || 0) + 1,
-    turnIndex: nextIndex
-  });
-}
 
-el("btnBingo").addEventListener("click", async ()=>{
-  await set(roomRef(`claims/${state.myId}`), true);
-});
+  const winners = [];
+  Object.entries(room.players || {}).forEach(([id, p])=>{
+    const board = room.boards && room.boards[id];
+    if(board && hasBingo(board, called)) winners.push({id, name:p.name});
+  });
+
+  if(winners.length > 0){
+    const updates = {
+      [`called/${n}`]: true,
+      currentNumber: n,
+      calledCount: (room.calledCount || 0) + 1,
+      status: "roundover",
+      roundWinnerName: winners.map(w=>w.name).join(" & ")
+    };
+    winners.forEach(w=>{
+      updates[`players/${w.id}/score`] = (room.players[w.id].score || 0) + 1;
+    });
+    await update(roomRef(), updates);
+  } else {
+    await update(roomRef(), {
+      [`called/${n}`]: true,
+      currentNumber: n,
+      calledCount: (room.calledCount || 0) + 1,
+      turnIndex: nextIndex
+    });
+  }
+}
 
 el("btnNextRound").addEventListener("click", async ()=>{
   await beginRound(false);
@@ -209,7 +224,6 @@ function onRoomUpdate(room){
     renderLobbyPlayers();
     show("btnStartGame");
     el("btnStartGame").disabled = Object.keys(room.players||{}).length < 2;
-    processClaimsIfHost(room);
   } else {
     renderLobbyPlayers();
     hide("btnStartGame");
@@ -297,22 +311,12 @@ function renderBoard(room){
       cell.className = "cell";
       cell.textContent = n;
       const isCalled = !!called[n];
-      const isMarked = state.marked.has(n);
-      if(isMarked) cell.classList.add("marked");
-      else if(isCalled) cell.classList.add("callable");
-      else if(isMyTurn) cell.classList.add("callable");
-
-      cell.addEventListener("click", async ()=>{
-        if(!isCalled){
-          if(!isMyTurn) return;
-          state.marked.add(n);
-          await callNumber(n);
-          return;
-        }
-        if(state.marked.has(n)) state.marked.delete(n);
-        else state.marked.add(n);
-        renderBoard(state.room);
-      });
+      if(isCalled){
+        cell.classList.add("marked");
+      } else if(isMyTurn){
+        cell.classList.add("callable");
+        cell.addEventListener("click", ()=>{ callNumber(n); });
+      }
       boardEl.appendChild(cell);
     }
   }
@@ -330,36 +334,7 @@ function renderScoreboard(room){
   });
 }
 
-// ---------- Host-only: validate bingo claims ----------
-let claimLock = false;
-async function processClaimsIfHost(room){
-  if(!state.isHost || claimLock) return;
-  if(room.status !== "playing") return;
-  const claims = room.claims || {};
-  const claimIds = Object.keys(claims);
-  if(claimIds.length === 0) return;
-
-  claimLock = true;
-  try{
-    for(const id of claimIds){
-      const board = room.boards && room.boards[id];
-      const player = room.players && room.players[id];
-      if(board && player && hasBingo(board, room.called)){
-        await update(roomRef(), {
-          status: "roundover",
-          roundWinnerName: player.name,
-          [`players/${id}/score`]: (player.score || 0) + 1,
-          claims: {}
-        });
-        break;
-      } else {
-        await remove(roomRef(`claims/${id}`));
-      }
-    }
-  } finally {
-    claimLock = false;
-  }
-}
+// ---------- Bingo wird direkt in callNumber() geprüft, kein manueller Claim nötig ----------
 
 function showRoundOverlay(room){
   el("roundWinnerName").textContent = room.roundWinnerName || "—";
