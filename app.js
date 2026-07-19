@@ -161,26 +161,24 @@ async function beginRound(isFirst){
     calledCount: 0,
     roundKey: (room.roundKey || 0) + 1,
     roundWinnerName: null,
-    claims: {}
+    claims: {},
+    turnOrder: playerIds,
+    turnIndex: 0
   });
   state.marked = new Set();
 }
 
-el("btnDraw").addEventListener("click", async ()=>{
+async function callNumber(n){
   const room = state.room;
-  if(!state.isHost || room.status !== "playing") return;
-  const called = room.called || {};
-  const pool = [];
-  for(let n=1;n<=25;n++) if(!called[n]) pool.push(n);
-  if(pool.length === 0) return;
-  const number = pool[Math.floor(Math.random()*pool.length)];
-
+  const order = room.turnOrder || [];
+  const nextIndex = order.length ? ((room.turnIndex || 0) + 1) % order.length : 0;
   await update(roomRef(), {
-    [`called/${number}`]: true,
-    currentNumber: number,
-    calledCount: (room.calledCount || 0) + 1
+    [`called/${n}`]: true,
+    currentNumber: n,
+    calledCount: (room.calledCount || 0) + 1,
+    turnIndex: nextIndex
   });
-});
+}
 
 el("btnBingo").addEventListener("click", async ()=>{
   await set(roomRef(`claims/${state.myId}`), true);
@@ -241,10 +239,15 @@ function onRoomUpdate(room){
     }
     el("calledCount").textContent = (room.calledCount || 0) + " von 25 gezogen";
     el("btnEndGame").classList.toggle("hidden", !state.isHost);
-    el("btnDraw").classList.toggle("hidden", !state.isHost);
-    const noneLeft = (room.calledCount || 0) >= 25;
-    el("btnDraw").disabled = noneLeft;
-    el("btnDraw").textContent = noneLeft ? "Alle Zahlen gezogen" : "Zahl ziehen";
+
+    const order = room.turnOrder || [];
+    const currentTurnId = order.length ? order[(room.turnIndex || 0) % order.length] : null;
+    const turnPlayer = currentTurnId && room.players ? room.players[currentTurnId] : null;
+    if(turnPlayer){
+      el("turnLabel").textContent = currentTurnId === state.myId
+        ? "Du bist dran – tippe eine freie Zahl"
+        : `${turnPlayer.name} ist dran`;
+    }
 
     renderBoard(room);
     renderScoreboard(room);
@@ -283,6 +286,10 @@ function renderBoard(room){
   boardEl.innerHTML = "";
   if(!board) return;
   const called = room.called || {};
+  const order = room.turnOrder || [];
+  const currentTurnId = order.length ? order[(room.turnIndex || 0) % order.length] : null;
+  const isMyTurn = currentTurnId === state.myId;
+
   for(let r=0;r<5;r++){
     for(let c=0;c<5;c++){
       const n = board[r][c];
@@ -293,8 +300,15 @@ function renderBoard(room){
       const isMarked = state.marked.has(n);
       if(isMarked) cell.classList.add("marked");
       else if(isCalled) cell.classList.add("callable");
-      cell.addEventListener("click", ()=>{
-        if(!called[n]) return;
+      else if(isMyTurn) cell.classList.add("callable");
+
+      cell.addEventListener("click", async ()=>{
+        if(!isCalled){
+          if(!isMyTurn) return;
+          state.marked.add(n);
+          await callNumber(n);
+          return;
+        }
         if(state.marked.has(n)) state.marked.delete(n);
         else state.marked.add(n);
         renderBoard(state.room);
