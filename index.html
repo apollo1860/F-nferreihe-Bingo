@@ -6,7 +6,7 @@
 <title>Fünferreihe – Bingo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-<script type="module" src="app.js?v=3"></script>
+<script type="module" src="app.js?v=4"></script>
 <style>
   :root{
     --ink:#152025;
@@ -212,6 +212,15 @@
 
   .error-msg{color:var(--dauber); font-size:13px; min-height:16px;}
   .footer-note{color:rgba(247,236,217,0.3); font-size:11px; text-align:center; margin-top:auto; padding-top:30px;}
+
+  .toast{
+    position:fixed; top:18px; left:50%; transform:translateX(-50%) translateY(-6px);
+    background:var(--dauber); color:#fff; padding:12px 22px; border-radius:12px;
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px;
+    box-shadow:var(--shadow); z-index:50; opacity:0; pointer-events:none;
+    transition:opacity .25s ease, transform .25s ease;
+  }
+  .toast.visible{opacity:1; transform:translateX(-50%) translateY(0);}
 </style>
 </head>
 <body>
@@ -262,24 +271,22 @@
       </div>
     </div>
     <div class="board" id="board"></div>
+    <div class="actions">
+      <button class="secondary hidden" id="btnNewRound">Neue Runde</button>
+      <button class="secondary hidden" id="btnEndGame">Spiel beenden</button>
+    </div>
     <div class="scoreboard">
       <h3>Punktestand</h3>
       <div class="players-list" id="gameScores"></div>
     </div>
-    <button class="secondary hidden" id="btnEndGame" style="margin-top:14px;">Spiel beenden</button>
   </div>
 
   <div class="footer-note">Läuft komplett im Browser · synchronisiert über Firebase</div>
 </div>
 
-<!-- Overlays -->
-<div id="overlayRound" class="overlay hidden">
-  <div class="big">🎉 <span class="dauber-word" id="roundWinnerName">—</span> hat Bingo!</div>
-  <div class="sub2" id="roundScoresText"></div>
-  <button class="primary hidden" id="btnNextRound">Nächste Runde</button>
-  <div class="waiting" id="waitNextRound"><span class="pulse"></span>Host startet die nächste Runde…</div>
-</div>
+<div id="bingoToast" class="toast"></div>
 
+<!-- Overlays -->
 <div id="overlayEnd" class="overlay hidden">
   <div class="big">Spiel vorbei</div>
   <div class="rank-list" id="finalRanking"></div>
