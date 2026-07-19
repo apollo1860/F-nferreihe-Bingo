@@ -209,10 +209,12 @@ function onRoomUpdate(room){
 
   if(state.isHost){
     renderLobbyPlayers();
+    show("btnStartGame");
     el("btnStartGame").disabled = Object.keys(room.players||{}).length < 2;
     processClaimsIfHost(room);
   } else {
     renderLobbyPlayers();
+    hide("btnStartGame");
   }
 
   if(room.status === "lobby"){
