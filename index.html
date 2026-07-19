@@ -257,13 +257,12 @@
     <div class="call-panel">
       <div class="call-number empty" id="callNumber">?</div>
       <div class="call-meta">
-        <div class="label">Aktuelle Zahl</div>
+        <div class="label" id="turnLabel">Aktuelle Zahl</div>
         <div class="count" id="calledCount">0 von 25 gezogen</div>
       </div>
     </div>
     <div class="board" id="board"></div>
     <div class="actions">
-      <button class="secondary" id="btnDraw">Zahl ziehen</button>
       <button class="primary" id="btnBingo">BINGO!</button>
     </div>
     <div class="scoreboard">
@@ -273,7 +272,7 @@
     <button class="secondary hidden" id="btnEndGame" style="margin-top:14px;">Spiel beenden</button>
   </div>
 
-  <div class="footer-note">Läuft komplett im Browser · peer-to-peer via PeerJS</div>
+  <div class="footer-note">Läuft komplett im Browser · synchronisiert über Firebase</div>
 </div>
 
 <!-- Overlays -->
@@ -289,6 +288,7 @@
   <div class="rank-list" id="finalRanking"></div>
   <button class="secondary" id="btnBackToStart">Neues Spiel</button>
 </div>
+
 
 </body>
 </html>
