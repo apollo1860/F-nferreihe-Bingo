@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
 import {
-  getDatabase, ref, set, update, get, onValue, remove, child
+  getDatabase, ref, set, update, get, onValue, remove
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
 
 // ---------- Firebase ----------
@@ -28,21 +28,25 @@ function shuffledBoard(){
   return board;
 }
 
-function hasBingo(board, calledObj){
+// Returns the keys of all completed lines (rows/cols/diagonals) for a board given a called-set
+function completedLines(board, calledObj){
   const called = calledObj || {};
   const has = n => !!called[n];
-  for(let r=0;r<5;r++){ if(board[r].every(has)) return true; }
+  const lines = [];
+  for(let r=0;r<5;r++){ if(board[r].every(has)) lines.push("r"+r); }
   for(let c=0;c<5;c++){
     let ok=true;
     for(let r=0;r<5;r++){ if(!has(board[r][c])){ ok=false; break; } }
-    if(ok) return true;
+    if(ok) lines.push("c"+c);
   }
   let d1=true, d2=true;
   for(let i=0;i<5;i++){
     if(!has(board[i][i])) d1=false;
     if(!has(board[i][4-i])) d2=false;
   }
-  return d1 || d2;
+  if(d1) lines.push("d1");
+  if(d2) lines.push("d2");
+  return lines;
 }
 
 function makeCode(){
@@ -71,8 +75,9 @@ const state = {
   myId:null,
   myName:"",
   roomCode:null,
-  room:null,        // last known snapshot of rooms/{code}
-  processedRoundKey:null
+  room:null,
+  lastScores:null,   // for detecting new bingos client-side (toast)
+  toastTimer:null
 };
 
 function roomRef(path){
@@ -100,8 +105,9 @@ el("btnCreate").addEventListener("click", async ()=>{
     currentNumber: null,
     calledCount: 0,
     roundKey: 0,
-    roundWinnerName: null,
-    claims: {}
+    scoredLines: {},
+    turnOrder: [],
+    turnIndex: 0
   });
 
   hide("screen-start");
@@ -142,11 +148,17 @@ el("btnJoin").addEventListener("click", async ()=>{
 });
 
 el("btnStartGame").addEventListener("click", async ()=>{
-  await beginRound(true);
+  await beginRound(state.room);
 });
 
-async function beginRound(isFirst){
-  const room = state.room;
+el("btnNewRound").addEventListener("click", async ()=>{
+  await beginRound(state.room);
+});
+
+// Reshuffles boards for all current players, resets called numbers & turn order.
+// Scores are NOT touched — they carry over.
+async function beginRound(providedRoom){
+  const room = providedRoom || state.room;
   const playerIds = Object.keys(room.players || {});
   const boards = {};
   playerIds.forEach(id => { boards[id] = shuffledBoard(); });
@@ -158,8 +170,7 @@ async function beginRound(isFirst){
     currentNumber: null,
     calledCount: 0,
     roundKey: (room.roundKey || 0) + 1,
-    roundWinnerName: null,
-    claims: {},
+    scoredLines: {},
     turnOrder: playerIds,
     turnIndex: 0
   });
@@ -168,41 +179,41 @@ async function beginRound(isFirst){
 async function callNumber(n){
   const room = state.room;
   const called = {...(room.called || {}), [n]: true};
-  const order = room.turnOrder || [];
-  const nextIndex = order.length ? ((room.turnIndex || 0) + 1) % order.length : 0;
+  const scoredLines = room.scoredLines || {};
 
-  const winners = [];
+  const updates = {
+    [`called/${n}`]: true,
+    currentNumber: n,
+    calledCount: (room.calledCount || 0) + 1
+  };
+
+  // Check every player's board for newly completed lines (not previously scored)
   Object.entries(room.players || {}).forEach(([id, p])=>{
     const board = room.boards && room.boards[id];
-    if(board && hasBingo(board, called)) winners.push({id, name:p.name});
+    if(!board) return;
+    const lines = completedLines(board, called);
+    const already = scoredLines[id] || {};
+    const newLines = lines.filter(l => !already[l]);
+    if(newLines.length > 0){
+      updates[`players/${id}/score`] = (p.score || 0) + newLines.length;
+      newLines.forEach(l => { updates[`scoredLines/${id}/${l}`] = true; });
+    }
   });
 
-  if(winners.length > 0){
-    const updates = {
-      [`called/${n}`]: true,
-      currentNumber: n,
-      calledCount: (room.calledCount || 0) + 1,
-      status: "roundover",
-      roundWinnerName: winners.map(w=>w.name).join(" & ")
-    };
-    winners.forEach(w=>{
-      updates[`players/${w.id}/score`] = (room.players[w.id].score || 0) + 1;
-    });
-    await update(roomRef(), updates);
-  } else {
-    await update(roomRef(), {
-      [`called/${n}`]: true,
-      currentNumber: n,
-      calledCount: (room.calledCount || 0) + 1,
-      turnIndex: nextIndex
-    });
+  const allCalled = (room.calledCount || 0) + 1 >= 25;
+  if(!allCalled){
+    const order = room.turnOrder || [];
+    updates.turnIndex = order.length ? ((room.turnIndex || 0) + 1) % order.length : 0;
+  }
+
+  await update(roomRef(), updates);
+
+  if(allCalled){
+    const fresh = await get(roomRef());
+    const freshRoom = fresh.val();
+    if(freshRoom) await beginRound(freshRoom);
   }
 }
-
-el("btnNextRound").addEventListener("click", async ()=>{
-  await beginRound(false);
-  hide("overlayRound");
-});
 
 el("btnEndGame").addEventListener("click", async ()=>{
   await update(roomRef(), { status: "gameover" });
@@ -220,6 +231,8 @@ function onRoomUpdate(room){
   if(!room) return;
   state.room = room;
 
+  detectNewBingos(room);
+
   if(state.isHost){
     renderLobbyPlayers();
     show("btnStartGame");
@@ -231,14 +244,13 @@ function onRoomUpdate(room){
 
   if(room.status === "lobby"){
     hide("screen-game");
-    hide("overlayRound");
     hide("overlayEnd");
     show("screen-lobby");
     hide("screen-start");
     return;
   }
 
-  if(room.status === "playing" || room.status === "roundover"){
+  if(room.status === "playing"){
     hide("screen-lobby");
     hide("screen-start");
     show("screen-game");
@@ -253,6 +265,7 @@ function onRoomUpdate(room){
     }
     el("calledCount").textContent = (room.calledCount || 0) + " von 25 gezogen";
     el("btnEndGame").classList.toggle("hidden", !state.isHost);
+    el("btnNewRound").classList.toggle("hidden", !state.isHost);
 
     const order = room.turnOrder || [];
     const currentTurnId = order.length ? order[(room.turnIndex || 0) % order.length] : null;
@@ -267,17 +280,35 @@ function onRoomUpdate(room){
     renderScoreboard(room);
   }
 
-  if(room.status === "roundover"){
-    if(state.processedRoundKey !== room.roundKey){
-      state.processedRoundKey = room.roundKey;
-      showRoundOverlay(room);
-    }
-  }
-
   if(room.status === "gameover"){
-    hide("overlayRound");
     showEndOverlay(room);
+  } else {
+    hide("overlayEnd");
   }
+}
+
+// Compares scores against the last known snapshot and shows a toast for anyone who gained points.
+function detectNewBingos(room){
+  const players = room.players || {};
+  if(state.lastScores){
+    const newWinners = [];
+    Object.entries(players).forEach(([id,p])=>{
+      const prev = state.lastScores[id] || 0;
+      const diff = (p.score || 0) - prev;
+      if(diff > 0) newWinners.push({ name: p.name, count: diff });
+    });
+    if(newWinners.length > 0) showBingoToast(newWinners);
+  }
+  state.lastScores = Object.fromEntries(Object.entries(players).map(([id,p])=>[id, p.score || 0]));
+}
+
+function showBingoToast(winners){
+  const text = winners.map(w => w.count > 1 ? `${w.name} (+${w.count})` : w.name).join(", ");
+  const t = el("bingoToast");
+  t.textContent = "🎉 Bingo: " + text;
+  t.classList.add("visible");
+  clearTimeout(state.toastTimer);
+  state.toastTimer = setTimeout(()=> t.classList.remove("visible"), 2600);
 }
 
 function renderLobbyPlayers(){
@@ -332,19 +363,6 @@ function renderScoreboard(room){
     div.innerHTML = `<span>${escapeHtml(p.name)}</span><span class="score">${p.score}</span>`;
     list.appendChild(div);
   });
-}
-
-// ---------- Bingo wird direkt in callNumber() geprüft, kein manueller Claim nötig ----------
-
-function showRoundOverlay(room){
-  el("roundWinnerName").textContent = room.roundWinnerName || "—";
-  const players = Object.values(room.players || {});
-  el("roundScoresText").textContent = players
-    .slice().sort((a,b)=>b.score-a.score)
-    .map(p=>`${p.name}: ${p.score}`).join(" · ");
-  show("overlayRound");
-  el("btnNextRound").classList.toggle("hidden", !state.isHost);
-  el("waitNextRound").classList.toggle("hidden", state.isHost);
 }
 
 function showEndOverlay(room){
